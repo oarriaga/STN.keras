@@ -33,7 +33,7 @@ class SpatialTransformer(Layer):
     def build(self, input_shape):
         self.locnet.build(input_shape)
         self.trainable_weights = self.locnet.trainable_weights
-        self.regularizers = self.locnet.regularizers
+        #self.regularizers = self.locnet.regularizers //NOT SUER ABOUT THIS, THERE IS NO MORE SUCH PARAMETR AT self.locnet
         self.constraints = self.locnet.constraints
 
     def compute_output_shape(self, input_shape):
