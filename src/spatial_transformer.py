@@ -33,10 +33,10 @@ class SpatialTransformer(Layer):
     def build(self, input_shape):
         self.locnet.build(input_shape)
         self.trainable_weights = self.locnet.trainable_weights
-        self.regularizers = self.locnet.regularizers
+        #self.regularizers = self.locnet.regularizers //NOT SUER ABOUT THIS, THERE IS NO MORE SUCH PARAMETR AT self.locnet
         self.constraints = self.locnet.constraints
 
-    def get_output_shape_for(self, input_shape):
+    def compute_output_shape(self, input_shape):
         output_size = self.output_size
         return (None,
                 int(output_size[0]),
@@ -123,10 +123,10 @@ class SpatialTransformer(Layer):
         x_linspace = tf.linspace(-1., 1., width)
         y_linspace = tf.linspace(-1., 1., height)
         x_coordinates, y_coordinates = tf.meshgrid(x_linspace, y_linspace)
-        x_coordinates = tf.reshape(x_coordinates, shape=(1, -1))
-        y_coordinates = tf.reshape(y_coordinates, shape=(1, -1))
+        x_coordinates = tf.reshape(x_coordinates, [-1])
+        y_coordinates = tf.reshape(y_coordinates, [-1])
         ones = tf.ones_like(x_coordinates)
-        indices_grid = tf.concat(0, [x_coordinates, y_coordinates, ones])
+        indices_grid = tf.concat([x_coordinates, y_coordinates, ones], 0)
         return indices_grid
 
     def _transform(self, affine_transformation, input_shape, output_size):
@@ -147,10 +147,11 @@ class SpatialTransformer(Layer):
         indices_grid = self._meshgrid(output_height, output_width)
         indices_grid = tf.expand_dims(indices_grid, 0)
         indices_grid = tf.reshape(indices_grid, [-1]) # flatten?
-        indices_grid = tf.tile(indices_grid, tf.pack([batch_size]))
-        indices_grid = tf.reshape(indices_grid, tf.pack([batch_size, 3, -1]))
 
-        transformed_grid = tf.batch_matmul(affine_transformation, indices_grid)
+        indices_grid = tf.tile(indices_grid, tf.stack([batch_size]))
+        indices_grid = tf.reshape(indices_grid, (batch_size, 3, -1))
+
+        transformed_grid = tf.matmul(affine_transformation, indices_grid)
         x_s = tf.slice(transformed_grid, [0, 0, 0], [-1, 1, -1])
         y_s = tf.slice(transformed_grid, [0, 1, 0], [-1, 1, -1])
         x_s_flatten = tf.reshape(x_s, [-1])
