@@ -1,6 +1,37 @@
 from keras.layers.core import Layer
 import keras.backend as K
-import tensorflow as tf
+
+if K.backend() == 'tensorflow':
+    import tensorflow as tf
+    def K_arange(start, stop=None, step=1, dtype='int32'):
+        result = tf.range(start, limit=stop, delta=step, name='arange')
+        if dtype != 'int32':
+            result = K.cast(result, dtype)
+        return result
+
+    def K_meshgrid(x, y):
+        return tf.meshgrid(x, y)
+
+    def K_matmul(x, y):
+        return tf.matmul(x, y)
+
+    def K_linspace(start, stop, num):
+        return tf.linspace(start, stop, num)
+
+elif K.backend() == 'theano':
+    from theano import tensor as T
+    def K_arange(start, stop=None, step=1, dtype='int32'):
+        return T.arange(start, stop=stop, step=step, dtype=dtype)
+
+    def K_meshgrid(x, y):
+        return T.mgrid(x, y)
+
+    def K_matmul(x, y):
+        return T.dot(x, y)
+
+    def K_linspace(start, stop, num):
+        step = ((stop - start) / num)
+        return T.arange(start, stop, step)
 
 class SpatialTransformer(Layer):
     """Spatial Transformer Layer
@@ -84,8 +115,7 @@ class SpatialTransformer(Layer):
         y1 = K.clip(y1, 0, max_y)
 
         flat_image_dimensions = width*height
-        #int_batch_size = K.int_shape(image)[0]
-        pixels_batch = tf.range(batch_size)*flat_image_dimensions
+        pixels_batch = K_arange(batch_size)*flat_image_dimensions
         flat_output_dimensions = output_height*output_width
         base = self._repeat(pixels_batch, flat_output_dimensions)
         base_y0 = base + y0*width
@@ -121,9 +151,9 @@ class SpatialTransformer(Layer):
         return output
 
     def _meshgrid(self, height, width):
-        x_linspace = tf.linspace(-1., 1., width)
-        y_linspace = tf.linspace(-1., 1., height)
-        x_coordinates, y_coordinates = tf.meshgrid(x_linspace, y_linspace)
+        x_linspace = K_linspace(-1., 1., width)
+        y_linspace = K_linspace(-1., 1., height)
+        x_coordinates, y_coordinates = K_meshgrid(x_linspace, y_linspace)
         x_coordinates = K.reshape(x_coordinates, [-1])
         y_coordinates = K.reshape(y_coordinates, [-1])
         ones = K.ones_like(x_coordinates)
@@ -152,9 +182,10 @@ class SpatialTransformer(Layer):
         indices_grid = K.tile(indices_grid, K.stack([batch_size]))
         indices_grid = K.reshape(indices_grid, (batch_size, 3, -1))
 
-        transformed_grid = tf.matmul(affine_transformation, indices_grid)
-        x_s = tf.slice(transformed_grid, [0, 0, 0], [-1, 1, -1])
-        y_s = tf.slice(transformed_grid, [0, 1, 0], [-1, 1, -1])
+        transformed_grid = K_matmul(affine_transformation, indices_grid)
+
+        x_s = transformed_grid[0:, 0:1, 0:]
+        y_s = transformed_grid[0:, 1:, 0:]
         x_s_flatten = K.reshape(x_s, [-1])
         y_s_flatten = K.reshape(y_s, [-1])
 
