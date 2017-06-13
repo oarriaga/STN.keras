@@ -1,4 +1,5 @@
 from keras.layers.core import Layer
+import keras.backend as K
 import tensorflow as tf
 
 class SpatialTransformer(Layer):
@@ -33,7 +34,6 @@ class SpatialTransformer(Layer):
     def build(self, input_shape):
         self.locnet.build(input_shape)
         self.trainable_weights = self.locnet.trainable_weights
-        #self.regularizers = self.locnet.regularizers //NOT SUER ABOUT THIS, THERE IS NO MORE SUCH PARAMETR AT self.locnet
         self.constraints = self.locnet.constraints
 
     def compute_output_shape(self, input_shape):
@@ -49,44 +49,42 @@ class SpatialTransformer(Layer):
         return output
 
     def _repeat(self, x, num_repeats):
-        ones = tf.ones((1, num_repeats), dtype='int32')
-        x = tf.reshape(x, shape=(-1,1))
-        x = tf.matmul(x, ones)
-        return tf.reshape(x, [-1])
+        x = K.expand_dims(x, axis=-1)
+        x = K.repeat_elements(x, num_repeats, axis=1)
+        return K.reshape(x, [-1])
 
     def _interpolate(self, image, x, y, output_size):
-        batch_size = tf.shape(image)[0]
-        height = tf.shape(image)[1]
-        width = tf.shape(image)[2]
-        num_channels = tf.shape(image)[3]
+        batch_size = K.shape(image)[0]
+        height = K.shape(image)[1]
+        width = K.shape(image)[2]
+        num_channels = K.shape(image)[3]
 
-        x = tf.cast(x , dtype='float32')
-        y = tf.cast(y , dtype='float32')
+        x = K.cast(x , dtype='float32')
+        y = K.cast(y , dtype='float32')
 
-        height_float = tf.cast(height, dtype='float32')
-        width_float = tf.cast(width, dtype='float32')
+        height_float = K.cast(height, dtype='float32')
+        width_float = K.cast(width, dtype='float32')
 
         output_height = output_size[0]
         output_width  = output_size[1]
 
-        x = .5*(x + 1.0)*(width_float)
-        y = .5*(y + 1.0)*(height_float)
+        x = .5 * (x + 1.0) * (width_float)
+        y = .5 * (y + 1.0) * (height_float)
 
-        x0 = tf.cast(tf.floor(x), 'int32')
+        x0 = K.cast(x, 'int32')
         x1 = x0 + 1
-        y0 = tf.cast(tf.floor(y), 'int32')
+        y0 = K.cast(y, 'int32')
         y1 = y0 + 1
 
-        max_y = tf.cast(height - 1, dtype='int32')
-        max_x = tf.cast(width - 1,  dtype='int32')
-        zero = tf.zeros([], dtype='int32')
-
-        x0 = tf.clip_by_value(x0, zero, max_x)
-        x1 = tf.clip_by_value(x1, zero, max_x)
-        y0 = tf.clip_by_value(y0, zero, max_y)
-        y1 = tf.clip_by_value(y1, zero, max_y)
+        max_x = int(K.int_shape(image)[1] - 1)
+        max_y = int(K.int_shape(image)[2] - 1)
+        x0 = K.clip(x0, 0, max_x)
+        x1 = K.clip(x1, 0, max_x)
+        y0 = K.clip(y0, 0, max_y)
+        y1 = K.clip(y1, 0, max_y)
 
         flat_image_dimensions = width*height
+        #int_batch_size = K.int_shape(image)[0]
         pixels_batch = tf.range(batch_size)*flat_image_dimensions
         flat_output_dimensions = output_height*output_width
         base = self._repeat(pixels_batch, flat_output_dimensions)
@@ -97,72 +95,75 @@ class SpatialTransformer(Layer):
         indices_c = base_y0 + x1
         indices_d = base_y1 + x1
 
-        flat_image = tf.reshape(image, shape=(-1, num_channels))
-        flat_image = tf.cast(flat_image, dtype='float32')
-        pixel_values_a = tf.gather(flat_image, indices_a)
-        pixel_values_b = tf.gather(flat_image, indices_b)
-        pixel_values_c = tf.gather(flat_image, indices_c)
-        pixel_values_d = tf.gather(flat_image, indices_d)
+        flat_image = K.reshape(image, shape=(-1, num_channels))
+        flat_image = K.cast(flat_image, dtype='float32')
+        pixel_values_a = K.gather(flat_image, indices_a)
+        pixel_values_b = K.gather(flat_image, indices_b)
+        pixel_values_c = K.gather(flat_image, indices_c)
+        pixel_values_d = K.gather(flat_image, indices_d)
 
-        x0 = tf.cast(x0, 'float32')
-        x1 = tf.cast(x1, 'float32')
-        y0 = tf.cast(y0, 'float32')
-        y1 = tf.cast(y1, 'float32')
+        x0 = K.cast(x0, 'float32')
+        x1 = K.cast(x1, 'float32')
+        y0 = K.cast(y0, 'float32')
+        y1 = K.cast(y1, 'float32')
 
-        area_a = tf.expand_dims(((x1 - x) * (y1 - y)), 1)
-        area_b = tf.expand_dims(((x1 - x) * (y - y0)), 1)
-        area_c = tf.expand_dims(((x - x0) * (y1 - y)), 1)
-        area_d = tf.expand_dims(((x - x0) * (y - y0)), 1)
-        output = tf.add_n([area_a*pixel_values_a,
-                           area_b*pixel_values_b,
-                           area_c*pixel_values_c,
-                           area_d*pixel_values_d])
+        area_a = K.expand_dims(((x1 - x) * (y1 - y)), 1)
+        area_b = K.expand_dims(((x1 - x) * (y - y0)), 1)
+        area_c = K.expand_dims(((x - x0) * (y1 - y)), 1)
+        area_d = K.expand_dims(((x - x0) * (y - y0)), 1)
+
+        values_a = area_a * pixel_values_a
+        values_b = area_b * pixel_values_b
+        values_c = area_c * pixel_values_c
+        values_d = area_d * pixel_values_d
+        output = values_a + values_b + values_c + values_d
+
         return output
 
     def _meshgrid(self, height, width):
         x_linspace = tf.linspace(-1., 1., width)
         y_linspace = tf.linspace(-1., 1., height)
         x_coordinates, y_coordinates = tf.meshgrid(x_linspace, y_linspace)
-        x_coordinates = tf.reshape(x_coordinates, [-1])
-        y_coordinates = tf.reshape(y_coordinates, [-1])
-        ones = tf.ones_like(x_coordinates)
-        indices_grid = tf.concat([x_coordinates, y_coordinates, ones], 0)
+        x_coordinates = K.reshape(x_coordinates, [-1])
+        y_coordinates = K.reshape(y_coordinates, [-1])
+        ones = K.ones_like(x_coordinates)
+        indices_grid = K.concatenate([x_coordinates, y_coordinates, ones], 0)
         return indices_grid
 
     def _transform(self, affine_transformation, input_shape, output_size):
-        batch_size = tf.shape(input_shape)[0]
-        height = tf.shape(input_shape)[1]
-        width = tf.shape(input_shape)[2]
-        num_channels = tf.shape(input_shape)[3]
+        batch_size = K.shape(input_shape)[0]
+        height = K.shape(input_shape)[1]
+        width = K.shape(input_shape)[2]
+        num_channels = K.shape(input_shape)[3]
 
-        affine_transformation = tf.reshape(affine_transformation, shape=(batch_size,2,3))
+        affine_transformation = K.reshape(affine_transformation,
+                                        shape=(batch_size, 2, 3))
 
-        affine_transformation = tf.reshape(affine_transformation, (-1, 2, 3))
-        affine_transformation = tf.cast(affine_transformation, 'float32')
+        affine_transformation = K.cast(affine_transformation, 'float32')
 
-        width = tf.cast(width, dtype='float32')
-        height = tf.cast(height, dtype='float32')
+        width = K.cast(width, dtype='float32')
+        height = K.cast(height, dtype='float32')
         output_height = output_size[0]
         output_width = output_size[1]
         indices_grid = self._meshgrid(output_height, output_width)
-        indices_grid = tf.expand_dims(indices_grid, 0)
-        indices_grid = tf.reshape(indices_grid, [-1]) # flatten?
+        indices_grid = K.expand_dims(indices_grid, 0)
+        indices_grid = K.reshape(indices_grid, [-1])
 
-        indices_grid = tf.tile(indices_grid, tf.stack([batch_size]))
-        indices_grid = tf.reshape(indices_grid, (batch_size, 3, -1))
+        indices_grid = K.tile(indices_grid, K.stack([batch_size]))
+        indices_grid = K.reshape(indices_grid, (batch_size, 3, -1))
 
         transformed_grid = tf.matmul(affine_transformation, indices_grid)
         x_s = tf.slice(transformed_grid, [0, 0, 0], [-1, 1, -1])
         y_s = tf.slice(transformed_grid, [0, 1, 0], [-1, 1, -1])
-        x_s_flatten = tf.reshape(x_s, [-1])
-        y_s_flatten = tf.reshape(y_s, [-1])
+        x_s_flatten = K.reshape(x_s, [-1])
+        y_s_flatten = K.reshape(y_s, [-1])
 
         transformed_image = self._interpolate(input_shape,
-                                                x_s_flatten,
-                                                y_s_flatten,
-                                                output_size)
+                                              x_s_flatten,
+                                              y_s_flatten,
+                                              output_size)
 
-        transformed_image = tf.reshape(transformed_image, shape=(batch_size,
+        transformed_image = K.reshape(transformed_image, shape=(batch_size,
                                                                 output_height,
                                                                 output_width,
                                                                 num_channels))
