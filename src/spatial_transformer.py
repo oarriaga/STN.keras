@@ -24,7 +24,7 @@ elif K.backend() == 'theano':
         return T.arange(start, stop=stop, step=step, dtype=dtype)
 
     def K_meshgrid(x, y):
-        return T.mgrid(x, y)
+        return T.mgrid[x, y]
 
     def K_matmul(x, y):
         return T.dot(x, y)
