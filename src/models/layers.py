@@ -47,16 +47,16 @@ class BilinearInterpolation(Layer):
         x = K.cast(K.flatten(sampled_grids[:, 0:1, :]), dtype='float32')
         y = K.cast(K.flatten(sampled_grids[:, 1:2, :]), dtype='float32')
 
-        x = .5 * (x + 1.0) * K.cast(height, dtype='float32')
-        y = .5 * (y + 1.0) * K.cast(width, dtype='float32')
+        x = .5 * (x + 1.0) * K.cast(width, dtype='float32')
+        y = .5 * (y + 1.0) * K.cast(height, dtype='float32')
 
         x0 = K.cast(x, 'int32')
         x1 = x0 + 1
         y0 = K.cast(y, 'int32')
         y1 = y0 + 1
 
-        max_x = int(K.int_shape(image)[1] - 1)
-        max_y = int(K.int_shape(image)[2] - 1)
+        max_x = int(K.int_shape(image)[2] - 1)
+        max_y = int(K.int_shape(image)[1] - 1)
 
         x0 = K.clip(x0, 0, max_x)
         x1 = K.clip(x1, 0, max_x)
