@@ -27,6 +27,11 @@ class BilinearInterpolation(Layer):
         self.output_size = output_size
         super(BilinearInterpolation, self).__init__(**kwargs)
 
+    def get_config(self):
+        return {
+            'output_size': self.output_size,
+        }
+
     def compute_output_shape(self, input_shapes):
         height, width = self.output_size
         num_channels = input_shapes[0][-1]
